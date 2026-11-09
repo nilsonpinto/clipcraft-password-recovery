@@ -80,28 +80,40 @@
     }
 
     async function validateRecoveryLink() {
-      const params = new URLSearchParams(window.location.search);
-      const tokenHash = params.get('token_hash');
-      const type = params.get('type');
+      const query = new URLSearchParams(window.location.search);
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const tokenHash = query.get('token_hash');
+      const type = query.get('type') || fragment.get('type');
+      const accessToken = fragment.get('access_token');
+      const refreshToken = fragment.get('refresh_token');
 
-      if (!tokenHash || type !== 'recovery') {
+      // O modelo padrão do Supabase confirma o link e devolve a sessão no fragmento (#).
+      if (type === 'recovery' && accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        if (error) {
+          showMessage('Não foi possível validar este link. Pede um novo e-mail de recuperação.', 'error');
+          return;
+        }
+      } else if (tokenHash && type === 'recovery') {
+        // Compatibilidade com um modelo de e-mail personalizado com token_hash.
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery'
+        });
+        if (error) {
+          showMessage('Não foi possível validar este link. Pede um novo e-mail de recuperação.', 'error');
+          return;
+        }
+      } else {
         showMessage('Este link não é válido ou já foi utilizado. Pede um novo e-mail de recuperação na aplicação.', 'error');
         return;
       }
 
-      // Remove o token da barra de endereço e do histórico assim que o lemos.
+      // Limpa tokens da barra de endereço e do histórico.
       window.history.replaceState({}, document.title, window.location.pathname);
-
-      const { error } = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: 'recovery'
-      });
-
-      if (error) {
-        showMessage('Não foi possível validar este link. Pede um novo e-mail de recuperação. (' + error.message + ')', 'error');
-        return;
-      }
-
       form.hidden = false;
       showMessage('Link validado. Introduz e confirma a tua nova palavra-passe.');
     }
