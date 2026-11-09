@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>ClipCraft Barber — Recuperar palavra-passe</title>
+  <style>
+    :root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      padding: 24px; background: #090909; color: #fff;
+    }
+    main {
+      width: 100%; max-width: 440px; padding: 30px;
+      background: #191919; border: 1px solid #39332a; border-radius: 18px;
+    }
+    .brand { color: #D6AE55; letter-spacing: 2.5px; font-weight: 800; }
+    h1 { font-size: 24px; margin: 16px 0 8px; }
+    p { color: #c8c8c8; line-height: 1.55; }
+    label { display: block; margin: 18px 0 7px; font-size: 12px; color: #D6AE55; font-weight: 700; }
+    input {
+      width: 100%; padding: 13px; border-radius: 9px;
+      border: 1px solid #555; background: #101010; color: #fff; font-size: 16px;
+    }
+    button {
+      width: 100%; margin-top: 22px; padding: 14px; border: 0;
+      border-radius: 9px; background: #D6AE55; color: #090909;
+      font-weight: 800; font-size: 14px; cursor: pointer;
+    }
+    button:disabled { opacity: .55; cursor: wait; }
+    #message { margin-top: 18px; min-height: 24px; font-size: 14px; }
+    .hint { font-size: 12px; color: #999; margin-top: 18px; }
+    .success { color: #9ed6a8 !important; }
+    .error { color: #ff9b9b !important; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">CLIPCRAFT BARBER.</div>
+    <h1>Nova palavra-passe</h1>
+    <p>Define uma nova palavra-passe para voltares a entrar na tua conta.</p>
+
+    <form id="form" hidden>
+      <label for="password">NOVA PALAVRA-PASSE</label>
+      <input id="password" type="password" autocomplete="new-password" minlength="6" required>
+      <label for="confirm">CONFIRMAR PALAVRA-PASSE</label>
+      <input id="confirm" type="password" autocomplete="new-password" minlength="6" required>
+      <button id="submit" type="submit">GUARDAR NOVA PALAVRA-PASSE</button>
+    </form>
+
+    <p id="message" role="status" aria-live="polite">A validar o link de recuperação…</p>
+    <p class="hint">O link só pode ser utilizado uma vez. Depois de alterares a palavra-passe, regressa à aplicação ClipCraft Barber e inicia sessão.</p>
+  </main>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const SUPABASE_URL = 'https://mdhoajedhrtlthxqnnfa.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_49Ya0rRsN4iVtTrNQne2xA_D5aPUKA-';
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false
+      }
+    });
+
+    const form = document.getElementById('form');
+    const message = document.getElementById('message');
+    const submit = document.getElementById('submit');
+
+    function showMessage(text, kind = '') {
+      message.textContent = text;
+      message.className = kind;
+    }
+
+    async function validateRecoveryLink() {
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get('token_hash');
+      const type = params.get('type');
+
+      if (!tokenHash || type !== 'recovery') {
+        showMessage('Este link não é válido ou já foi utilizado. Pede um novo e-mail de recuperação na aplicação.', 'error');
+        return;
+      }
+
+      // Remove o token da barra de endereço e do histórico assim que o lemos.
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'recovery'
+      });
+
+      if (error) {
+        showMessage('Não foi possível validar este link. Pede um novo e-mail de recuperação. (' + error.message + ')', 'error');
+        return;
+      }
+
+      form.hidden = false;
+      showMessage('Link validado. Introduz e confirma a tua nova palavra-passe.');
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirm').value;
+
+      if (password.length < 6) {
+        showMessage('A palavra-passe deve ter pelo menos 6 caracteres.', 'error');
+        return;
+      }
+      if (password !== confirm) {
+        showMessage('As palavras-passe não coincidem.', 'error');
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = 'A GUARDAR…';
+      showMessage('A atualizar a palavra-passe…');
+
+      const { error } = await supabase.auth.updateUser({ password });
+
+      if (error) {
+        showMessage('Não foi possível alterar a palavra-passe: ' + error.message, 'error');
+        submit.disabled = false;
+        submit.textContent = 'GUARDAR NOVA PALAVRA-PASSE';
+        return;
+      }
+
+      form.hidden = true;
+      showMessage('Palavra-passe alterada com sucesso! Já podes regressar à aplicação e iniciar sessão.', 'success');
+    });
+
+    validateRecoveryLink().catch((error) => {
+      showMessage('Ocorreu um erro ao validar o link. Pede um novo e-mail de recuperação.', 'error');
+    });
+  </script>
+</body>
+</html>
